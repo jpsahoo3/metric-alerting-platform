@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 
 export function MetricSimulation() {
@@ -10,6 +10,7 @@ export function MetricSimulation() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [alerts, setAlerts] = useState([]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -26,6 +27,13 @@ export function MetricSimulation() {
 
     if (!formData.metricName.trim() || !formData.value) {
       setError('Please fill in all fields');
+      return;
+    }
+
+    // Ensure metricName has at least one configured alert
+    const hasAlert = alerts.some(a => a.metricName && a.metricName.toLowerCase() === formData.metricName.toLowerCase());
+    if (!hasAlert) {
+      setError(`No alert configured for metric '${formData.metricName}'. Create an alert first.`);
       return;
     }
 
@@ -51,6 +59,13 @@ export function MetricSimulation() {
   };
 
   const quickSubmit = async (metricName, value) => {
+    // Check there is at least one alert for this metric
+    const hasAlert = alerts.some(a => a.metricName && a.metricName.toLowerCase() === metricName.toLowerCase());
+    if (!hasAlert) {
+      setError(`No alert configured for metric '${metricName}'. Create an alert first.`);
+      return;
+    }
+
     try {
       setLoading(true);
       const result = await api.submitMetric({
@@ -62,11 +77,29 @@ export function MetricSimulation() {
       if (result.success) {
         setResult(result.data);
         setError(null);
+      } else {
+        setError(result.error || 'Failed to submit metric');
       }
+    } catch (err) {
+      setError('Failed to submit metric');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchAlerts = async () => {
+      try {
+        const res = await api.getAlerts();
+        if (mounted && res && res.success) setAlerts(res.data || []);
+      } catch (err) {
+        // ignore
+      }
+    };
+    fetchAlerts();
+    return () => { mounted = false; };
+  }, []);
 
   return (
     <div className="screen">
